@@ -17,6 +17,20 @@ describe("resolveConversationIdFromTargets", () => {
     expect(resolved).toBe("987654321");
   });
 
+  it("extracts room ids from room: targets", () => {
+    const resolved = resolveConversationIdFromTargets({
+      targets: ["room:!room:example"],
+    });
+    expect(resolved).toBe("!room:example");
+  });
+
+  it("extracts room ids from matrix-scoped room targets", () => {
+    const resolved = resolveConversationIdFromTargets({
+      targets: ["matrix:room:!room:example"],
+    });
+    expect(resolved).toBe("!room:example");
+  });
+
   it("extracts ids from Discord channel mentions", () => {
     const resolved = resolveConversationIdFromTargets({
       targets: ["<#1475250310120214812>"],
