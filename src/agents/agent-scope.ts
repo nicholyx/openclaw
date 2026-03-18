@@ -124,23 +124,27 @@ export function resolveAgentConfig(
   if (!entry) {
     return undefined;
   }
+  const defaults = cfg.agents?.defaults;
   return {
     name: typeof entry.name === "string" ? entry.name : undefined,
-    workspace: typeof entry.workspace === "string" ? entry.workspace : undefined,
+    workspace: typeof entry.workspace === "string" ? entry.workspace : defaults?.workspace,
     agentDir: typeof entry.agentDir === "string" ? entry.agentDir : undefined,
     model:
       typeof entry.model === "string" || (entry.model && typeof entry.model === "object")
         ? entry.model
-        : undefined,
+        : defaults?.model,
     skills: Array.isArray(entry.skills) ? entry.skills : undefined,
-    memorySearch: entry.memorySearch,
-    humanDelay: entry.humanDelay,
-    heartbeat: entry.heartbeat,
-    identity: entry.identity,
-    groupChat: entry.groupChat,
-    subagents: typeof entry.subagents === "object" && entry.subagents ? entry.subagents : undefined,
-    sandbox: entry.sandbox,
-    tools: entry.tools,
+    memorySearch: entry.memorySearch ?? defaults?.memorySearch,
+    humanDelay: entry.humanDelay ?? defaults?.humanDelay,
+    heartbeat: entry.heartbeat ?? defaults?.heartbeat,
+    identity: entry.identity ?? undefined,
+    groupChat: entry.groupChat ?? undefined,
+    subagents:
+      typeof entry.subagents === "object" && entry.subagents
+        ? entry.subagents
+        : defaults?.subagents,
+    sandbox: entry.sandbox ?? defaults?.sandbox,
+    tools: entry.tools ?? undefined,
   };
 }
 
