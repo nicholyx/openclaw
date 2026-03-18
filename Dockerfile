@@ -145,6 +145,9 @@ COPY --from=runtime-assets --chown=node:node /app/openclaw.mjs .
 COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
 COPY --from=runtime-assets --chown=node:node /app/skills ./skills
 COPY --from=runtime-assets --chown=node:node /app/docs ./docs
+# Copy src/ and apps/ for runtime use by extensions (e.g., WhatsApp extension)
+COPY --from=runtime-assets --chown=node:node /app/src ./src
+COPY --from=runtime-assets --chown=node:node /app/apps ./apps
 
 # Keep pnpm available in the runtime image for container-local workflows.
 # Use a shared Corepack home so the non-root `node` user does not need a
