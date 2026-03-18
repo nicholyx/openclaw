@@ -199,18 +199,7 @@ describe("resolveHeartbeatPrompt", () => {
 });
 
 describe("isHeartbeatEnabledForAgent", () => {
-  it("enables only explicit heartbeat agents when configured", () => {
-    const cfg: OpenClawConfig = {
-      agents: {
-        defaults: { heartbeat: { every: "30m" } },
-        list: [{ id: "main" }, { id: "ops", heartbeat: { every: "1h" } }],
-      },
-    };
-    expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(false);
-    expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(true);
-  });
-
-  it("falls back to default agent when no explicit heartbeat entries", () => {
+  it("enables heartbeat for all agents when defaults.heartbeat is configured", () => {
     const cfg: OpenClawConfig = {
       agents: {
         defaults: { heartbeat: { every: "30m" } },
@@ -218,6 +207,38 @@ describe("isHeartbeatEnabledForAgent", () => {
       },
     };
     expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true);
+    expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(true);
+  });
+
+  it("enables heartbeat for agents with explicit heartbeat override", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: { heartbeat: { every: "30m" } },
+        list: [{ id: "main" }, { id: "ops", heartbeat: { every: "1h" } }],
+      },
+    };
+    expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true);
+    expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(true);
+  });
+
+  it("enables heartbeat for agents with empty heartbeat object to opt-in", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: { heartbeat: { every: "30m" } },
+        list: [{ id: "main" }, { id: "ops", heartbeat: {} }],
+      },
+    };
+    expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true);
+    expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(true);
+  });
+
+  it("disables heartbeat when no defaults and no explicit heartbeat", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [{ id: "main" }, { id: "ops" }],
+      },
+    };
+    expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true); // default agent
     expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(false);
   });
 });
@@ -497,7 +518,7 @@ describe("runHeartbeatOnce", () => {
     hasActiveWebListener: () => true,
   });
 
-  it("skips when agent heartbeat is not enabled", async () => {
+  it("runs for agents inheriting default heartbeat config", async () => {
     const cfg: OpenClawConfig = {
       agents: {
         defaults: { heartbeat: { every: "30m" } },
@@ -506,10 +527,10 @@ describe("runHeartbeatOnce", () => {
     };
 
     const res = await runHeartbeatOnce({ cfg, agentId: "main" });
-    expect(res.status).toBe("skipped");
-    if (res.status === "skipped") {
-      expect(res.reason).toBe("disabled");
-    }
+    // Now main agent inherits heartbeat from defaults.heartbeat
+    // It should run (status="ran") instead of being skipped (status="skipped", reason="disabled")
+    expect(res.status).toBe("ran");
+    expect(res.status).not.toBe("skipped");
   });
 
   it("skips outside active hours", async () => {

@@ -74,8 +74,17 @@ pnpm test -- src/infra/heartbeat-runner.returns-default-unset.test.ts src/comman
 ## Skills 使用记录
 
 - [x] using-git-worktrees: 创建隔离的工作环境
-- [ ] brainstorming: 深入理解需求
-- [ ] test-driven-development: 编写测试
-- [ ] subagent-driven-development: 实现修复
-- [ ] verification-before-completion: 验证
+- [x] brainstorming: 深入理解需求（已完成，采用方案 A）
+  - **完成结果**: 分析了问题根源，提出了两种方案，推荐方案 A（默认启用 + 显式选择退出）
+  - **方案 A 核心逻辑**: 如果配置了 `agents.defaults.heartbeat`，所有代理都启用心跳
+  - **优势**: 符合用户直觉、最小化代码改动、向后兼容
+- [x] test-driven-development: 编写测试
+  - **RED 阶段**: 编写了 4 个测试用例，验证期望的行为
+  - **GREEN 阶段**: 实现了最小代码修复，所有测试通过
+  - **测试结果**: 27 个测试全部通过
+- [x] verification-before-completion: 验证
+  - **测试验证**: 所有 27 个测试通过
+  - **代码检查**: `pnpm check` 全部通过
+  - **构建验证**: `pnpm build` 成功
+  - **修改文件**: 3 个文件（核心逻辑、测试、文档）
 - [ ] requesting-code-review: 代码审查
