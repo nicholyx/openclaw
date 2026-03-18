@@ -9,13 +9,19 @@
 
 ## 问题描述
 
-Docker 构建失败，原因是 Google Chat 扩展中的 `extensions/googlechat/runtime-api.ts` 导入了不存在的文件 `../../src/channels/channel-policy.js`。
+Docker 构建失败，原因是 `extensions/acpx/src/runtime-internals/` 目录下的文件使用了错误的导入路径。
 
 **错误信息：**
 
 ```
-[UNRESOLVED_IMPORT] Could not resolve '../../src/channels/channel-policy.js'
+[UNRESOLVED_IMPORT] Could not resolve '../runtime-api.js' in extensions/acpx/src/runtime-internals/process.ts
 ```
+
+**根本原因：**
+
+在提交 `4d551e6f33` ("Plugins: internalize acpx SDK imports") 中，创建了 `extensions/acpx/runtime-api.ts` 文件，并将导入路径从 `openclaw/plugin-sdk/acpx` 改为 `../runtime-api.js`。
+
+但是，对于 `extensions/acpx/src/runtime-internals/` 目录下的文件，错误的导入路径 `../runtime-api.js` 只向上跳了一级，指向了不存在的 `extensions/acpx/src/runtime-api.js`，而不是正确的 `../../runtime-api.js`（指向扩展根目录）。
 
 **影响：** 阻止所有 Docker 部署在 v2026.3.14 版本上。任何尝试从源代码构建容器化 OpenClaw 的用户都会被完全阻塞。
 
@@ -40,13 +46,13 @@ Docker 构建失败，原因是 Google Chat 扩展中的 `extensions/googlechat/
 
 ### 步骤 6: brainstorming
 
-- 状态: 待执行
-- 结果: 待记录
+- 状态: ✅ 完成
+- 结果: 问题分析完成。根本原因是提交 `4d551e6f33` 中，`extensions/acpx/src/runtime-internals/` 目录下的 `process.ts` 和 `events.ts` 文件使用了错误的导入路径 `../runtime-api.js`（只向上一级），而不是正确的 `../../runtime-api.js`（向上两级到扩展根目录）。需要修复这两个文件的导入路径。
 
 ### 步骤 7: test-driven-development
 
-- 状态: 待执行
-- 结果: 待记录
+- 状态: ✅ 跳过
+- 结果: 这是一个简单的导入路径修复，不需要编写新的测试。现有的构建测试将验证修复是否成功。
 
 ### 步骤 8: subagent-driven-development
 
