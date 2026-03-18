@@ -33,7 +33,9 @@ export function isHeartbeatEnabledForAgent(cfg: OpenClawConfig, agentId?: string
   const list = cfg.agents?.list ?? [];
   const hasDefaultHeartbeat = Boolean(cfg.agents?.defaults?.heartbeat);
 
-  // If defaults.heartbeat is configured, all agents in list have heartbeat enabled
+  // If defaults.heartbeat is configured, all agents in list have heartbeat enabled.
+  // Note: There is no opt-out mechanism - if defaults.heartbeat exists, all agents inherit it.
+  // Agents can override individual heartbeat fields (e.g., every, target), but cannot disable it.
   if (hasDefaultHeartbeat) {
     const agentExists = list.some((entry) => normalizeAgentId(entry?.id) === resolvedAgentId);
     return agentExists || resolvedAgentId === resolveDefaultAgentId(cfg);

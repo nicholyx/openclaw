@@ -241,6 +241,22 @@ describe("isHeartbeatEnabledForAgent", () => {
     expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true); // default agent
     expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(false);
   });
+
+  it("cannot opt-out when defaults.heartbeat is configured", () => {
+    // Note: There is no opt-out mechanism - if defaults.heartbeat exists,
+    // all agents inherit it. Agents can override fields but cannot disable.
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: { heartbeat: { every: "30m" } },
+        list: [
+          { id: "main" },
+          { id: "no-heartbeat", heartbeat: { every: "0m" } }, // Can't disable
+        ],
+      },
+    };
+    expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true);
+    expect(isHeartbeatEnabledForAgent(cfg, "no-heartbeat")).toBe(true);
+  });
 });
 
 describe("resolveHeartbeatDeliveryTarget", () => {
