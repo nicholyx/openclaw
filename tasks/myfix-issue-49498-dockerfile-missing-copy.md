@@ -5,7 +5,7 @@
 - **Issue 编号**: #49498
 - **Issue 类型**: bug
 - **仓库**: openclaw/openclaw
-- **状态**: In Progress
+- **状态**: Completed
 
 ## 问题描述
 
@@ -46,7 +46,7 @@ COPY --from=runtime-assets --chown=node:node /app/apps ./apps
 
 ## 修复内容
 
-在 `Dockerfile` 的 runtime stage 添加了两个 COPY 挽令：
+在 `Dockerfile` 的 runtime stage 添加了两个 COPY 挽回指令：
 
 ```dockerfile
 # Copy src/ and apps/ for runtime use by extensions (e.g., WhatsApp extension)
@@ -56,9 +56,10 @@ COPY --from=runtime-assets --chown=node:node /app/apps ./apps
 
 **修复原因：**
 
-- WhatsApp extension 通过相对路径引用 `src/channels/plugins/account-helpers.js`
-- WhatsApp extension 通过相对路径引用 `apps/shared/OpenClawKit/Sources/OpenClawKit/Resources/tool-display.json`
-- Dockerfile 的 runtime stage 缺少这两个目录，- 导致 runtime image 中无法找到这些文件，- extension 无法正常运行
+1. WhatsApp extension 通过相对路径引用 `src/channels/plugins/account-helpers.js`
+2. WhatsApp extension 通过相对路径引用 `apps/shared/OpenClawKit/Sources/OpenClawKit/Resources/tool-display.json`
+3. Dockerfile 的 runtime stage 原本缺少这两个目录，导致 runtime image 中无法找到这些文件
+4. 没有 src/ 和 apps/ 目录，extension 无法正常运行
 
 ## 进度记录
 
@@ -66,3 +67,4 @@ COPY --from=runtime-assets --chown=node:node /app/apps ./apps
 - 2026-03-18: 创建 worktree 和分支
 - 2026-03-18: 创建 task 文档
 - 2026-03-18: 实现修复（添加 COPY src/ 和 apps/ 指令）
+- 2026-03-18: 代码已推送到 origin，- **下一步**: 用户线下确认后手动提交 PR 到
