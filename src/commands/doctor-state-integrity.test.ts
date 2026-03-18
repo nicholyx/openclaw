@@ -191,4 +191,59 @@ describe("doctor state integrity oauth dir checks", () => {
     const text = await runStateIntegrityText(cfg);
     expect(text).not.toContain("recent sessions are missing transcripts");
   });
+
+  it("does not report false-positive orphans when sessions dir is accessed via symlink", async () => {
+    // Skip on Windows where symlink behavior differs
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const cfg: OpenClawConfig = {};
+    const realHome = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-real-home-"));
+    const symlinkHome = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-symlink-home-"));
+
+    try {
+      // Create the real .openclaw directory structure
+      const realOpenClawDir = path.join(realHome, ".openclaw");
+      const realSessionsDir = path.join(realOpenClawDir, "agents", "main", "sessions");
+      fs.mkdirSync(realSessionsDir, { recursive: true, mode: 0o700 });
+
+      // Create a valid session transcript file
+      const sessionId = "valid-session-via-symlink";
+      const transcriptPath = path.join(realSessionsDir, `${sessionId}.jsonl`);
+      fs.writeFileSync(transcriptPath, '{"type":"session"}\n');
+
+      // Create session store referencing the session
+      const storePath = path.join(realSessionsDir, "sessions.json");
+      fs.writeFileSync(
+        storePath,
+        JSON.stringify({
+          "agent:main:main": {
+            sessionId,
+            updatedAt: Date.now(),
+          },
+        }),
+      );
+
+      // Create symlink: symlinkHome/.openclaw -> realHome/.openclaw
+      const symlinkOpenClawDir = path.join(symlinkHome, ".openclaw");
+      fs.symlinkSync(realOpenClawDir, symlinkOpenClawDir, "dir");
+
+      // Configure to use the symlinked path
+      process.env.HOME = symlinkHome;
+      process.env.OPENCLAW_STATE_DIR = symlinkOpenClawDir;
+
+      // Run doctor
+      await noteStateIntegrity(cfg, { confirmSkipInNonInteractive: vi.fn(async () => false) });
+
+      // Should NOT report any orphan transcripts (the session is valid)
+      const text = stateIntegrityText();
+      expect(text).not.toContain("orphan transcript file");
+      expect(text).not.toContain("These .jsonl files are no longer referenced");
+    } finally {
+      // Cleanup
+      fs.rmSync(symlinkHome, { recursive: true, force: true });
+      fs.rmSync(realHome, { recursive: true, force: true });
+    }
+  });
 });

@@ -171,6 +171,15 @@ function tryResolveRealPath(targetPath: string): string | null {
   }
 }
 
+/**
+ * Canonicalize a file path by resolving symlinks.
+ * Falls back to path.resolve() if realpath fails (e.g., file doesn't exist).
+ * This ensures consistent path comparison when directories are accessed via symlinks.
+ */
+function canonicalizePath(filePath: string): string {
+  return tryResolveRealPath(filePath) ?? path.resolve(filePath);
+}
+
 function decodeMountInfoPath(value: string): string {
   return value.replace(/\\([0-7]{3})/g, (_, octal: string) =>
     String.fromCharCode(Number.parseInt(octal, 8)),
@@ -770,8 +779,9 @@ export async function noteStateIntegrity(
         continue;
       }
       try {
+        // Canonicalize to handle symlinks consistently
         referencedTranscriptPaths.add(
-          path.resolve(resolveSessionFilePath(entry.sessionId, entry, sessionPathOpts)),
+          canonicalizePath(resolveSessionFilePath(entry.sessionId, entry, sessionPathOpts)),
         );
       } catch {
         // ignore invalid legacy paths
@@ -780,8 +790,9 @@ export async function noteStateIntegrity(
     const sessionDirEntries = fs.readdirSync(sessionsDir, { withFileTypes: true });
     const orphanTranscriptPaths = sessionDirEntries
       .filter((entry) => entry.isFile() && isPrimarySessionTranscriptFileName(entry.name))
-      .map((entry) => path.resolve(path.join(sessionsDir, entry.name)))
-      .filter((filePath) => !referencedTranscriptPaths.has(filePath));
+      .map((entry) => path.join(sessionsDir, entry.name))
+      // Canonicalize both sides for consistent symlink handling
+      .filter((filePath) => !referencedTranscriptPaths.has(canonicalizePath(filePath)));
     if (orphanTranscriptPaths.length > 0) {
       const orphanCount = countLabel(orphanTranscriptPaths.length, "orphan transcript file");
       const orphanPreview = formatFilePreview(orphanTranscriptPaths);
