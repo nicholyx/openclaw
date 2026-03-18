@@ -13,7 +13,7 @@ describe("iMessage imports", () => {
     expect(runtimeApi.resolveOutboundSendDep).toBeDefined();
   });
 
-  it("channel.runtime can import resolveOutboundSendDep from relative path", async () => {
+  it("channel.runtime can import from relative path", async () => {
     // This test verifies that channel.runtime.ts can successfully import
     // resolveOutboundSendDep from the relative path ../runtime-api.js
     // instead of from openclaw/plugin-sdk/channel-runtime
@@ -26,5 +26,29 @@ describe("iMessage imports", () => {
     // Should export the functions that use resolveOutboundSendDep
     expect(typeof channelRuntime.sendIMessageOutbound).toBe("function");
     expect(typeof channelRuntime.notifyIMessageApproval).toBe("function");
+  });
+
+  it("channel.ts (main plugin entry) can import from relative path", async () => {
+    // This test verifies that the main plugin entry point channel.ts
+    // can be imported without "Cannot find package 'openclaw'" error
+    const channel = await import("./channel.js");
+
+    // The module should load successfully
+    expect(channel).toBeDefined();
+
+    // Should export the main plugin
+    expect(channel.imessagePlugin).toBeDefined();
+  });
+
+  it("outbound-adapter can import from relative path", async () => {
+    // This test verifies that outbound-adapter.ts can successfully import
+    // resolveOutboundSendDep from the relative path ../runtime-api.js
+    const outboundAdapter = await import("./outbound-adapter.js");
+
+    // The module should load successfully
+    expect(outboundAdapter).toBeDefined();
+
+    // Should export the outbound adapter
+    expect(outboundAdapter.imessageOutbound).toBeDefined();
   });
 });

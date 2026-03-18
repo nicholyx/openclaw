@@ -1,5 +1,4 @@
 import { buildAccountScopedAllowlistConfigEditor } from "openclaw/plugin-sdk/allowlist-config-edit";
-import { resolveOutboundSendDep } from "openclaw/plugin-sdk/channel-runtime";
 import { buildOutboundBaseSessionKey } from "openclaw/plugin-sdk/core";
 import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import { type RoutePeer } from "openclaw/plugin-sdk/routing";
