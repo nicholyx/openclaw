@@ -40,10 +40,11 @@ return resolvedAgentId === resolveDefaultAgentId(cfg);
 ## 实现计划
 
 - [x] 理解需求（brainstorming）
-- [ ] 编写测试（TDD）
-- [ ] 实现修复
-- [ ] 验证通过
-- [ ] 代码审查
+- [x] 编写测试（TDD）
+- [x] 实现修复
+- [x] 验证通过
+- [x] 代码审查
+- [x] 文档改进
 
 ## 进度记录
 
@@ -81,10 +82,22 @@ pnpm test -- src/infra/heartbeat-runner.returns-default-unset.test.ts src/comman
 - [x] test-driven-development: 编写测试
   - **RED 阶段**: 编写了 4 个测试用例，验证期望的行为
   - **GREEN 阶段**: 实现了最小代码修复，所有测试通过
-  - **测试结果**: 27 个测试全部通过
+  - **测试结果**: 28 个测试全部通过（包含新增的退出行为测试）
 - [x] verification-before-completion: 验证
-  - **测试验证**: 所有 27 个测试通过
+  - **测试验证**: 所有 28 个测试通过
   - **代码检查**: `pnpm check` 全部通过
   - **构建验证**: `pnpm build` 成功
-  - **修改文件**: 3 个文件（核心逻辑、测试、文档）
-- [ ] requesting-code-review: 代码审查
+  - **修改文件**: 2 个文件（核心逻辑、测试）
+- [x] requesting-code-review: 代码审查
+  - **审查结果**: APPROVED（批准合并）
+  - **审查反馈**: 实现正确，测试充分，向后兼容
+  - **改进措施**: 添加了退出行为的文档和测试，澄清了设计限制
+  - **审查 agent**: superpowers:code-reviewer
+
+## 最终状态
+
+- **状态**: ✅ 完成
+- **提交**: 2 个功能提交 + 1 个文档改进提交
+- **测试**: 28/28 通过
+- **审查**: APPROVED
+- **已推送**: origin/myfix/issue-49613-heartbeat-inheritance
