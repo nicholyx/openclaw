@@ -860,4 +860,26 @@ describe("classifyFailoverReason", () => {
       ),
     ).toBe("timeout");
   });
+  it("classifies JSON api_error with non-standard message as timeout (MiniMax 520)", () => {
+    // MiniMax returns api_error with non-standard message text like "unknown error, 520 (1000)"
+    // This should still trigger fallback because api_error type indicates provider-side failure.
+    expect(
+      classifyFailoverReason(
+        '{"type":"error","error":{"type":"api_error","message":"unknown error, 520 (1000)"}}',
+      ),
+    ).toBe("timeout");
+  });
+  it("classifies JSON api_error with any message as timeout", () => {
+    // Any api_error type is a provider-side failure, regardless of message text.
+    expect(
+      classifyFailoverReason(
+        '{"type":"error","error":{"type":"api_error","message":"temporary overload"}}',
+      ),
+    ).toBe("timeout");
+    expect(
+      classifyFailoverReason(
+        '{"type":"error","error":{"type":"api_error","message":"service temporarily unavailable"}}',
+      ),
+    ).toBe("timeout");
+  });
 });
