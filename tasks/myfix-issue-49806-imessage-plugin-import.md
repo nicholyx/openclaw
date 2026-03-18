@@ -35,12 +35,19 @@ Cannot find package 'openclaw' imported from /Users/duanxiaowen/AI_Projects/molt
 ## 实现计划
 
 - [x] 理解需求
-- [ ] 编写测试
-- [ ] 实现修复
-- [ ] 验证通过
+- [x] 编写测试
+- [x] 实现修复
+- [x] 验证通过
 - [ ] 代码审查
 
 ## 进度记录
 
-- 2026-03-18: 开始处理，创建 worktree 和分支
-- 2026-03-18: 理解 issue 根本原因和修复方案
+- 2026-03-18 21:21: 开始处理，创建 worktree 和分支
+- 2026-03-18 21:22: 理解 issue 根本原因和修复方案
+- 2026-03-18 21:25: 编写测试（TDD RED 阶段） - 测试失败，符合预期
+- 2026-03-18 21:27: 实现修复（TDD GREEN 阶段） - 测试通过，修复完成
+  - 修改 `extensions/imessage/runtime-api.ts`：添加 `resolveOutboundSendDep` 和 `OutboundSendDeps` 的重新导出
+  - 修改 `extensions/imessage/src/channel.runtime.ts`：将导入从 `openclaw/plugin-sdk/channel-runtime` 改为相对路径 `../runtime-api.js`
+  - 创建测试文件 `extensions/imessage/src/imports.test.ts`：验证导入正确性
+- 2026-03-18 21:28: TypeScript 编译通过
+- 2026-03-18 21:30: 验证完成（所有测试通过，lint 通过，构建成功）

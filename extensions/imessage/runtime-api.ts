@@ -23,3 +23,6 @@ export { monitorIMessageProvider } from "./src/monitor.js";
 export type { MonitorIMessageOpts } from "./src/monitor.js";
 export { probeIMessage } from "./src/probe.js";
 export { sendMessageIMessage } from "./src/send.js";
+
+// Re-export for channel.runtime.ts to avoid openclaw package import
+export { resolveOutboundSendDep, type OutboundSendDeps } from "openclaw/plugin-sdk/channel-runtime";
