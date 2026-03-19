@@ -72,10 +72,10 @@ if (process.platform === "win32") {
 
 ## 实现计划
 
-- [ ] 理解需求 - brainstorming skill
-- [ ] 编写测试 - test-driven-development skill
-- [ ] 实现修复 - subagent-driven-development skill
-- [ ] 验证通过 - verification-before-completion skill
+- [x] 理解需求 - brainstorming skill ✅
+- [x] 编写测试 - test-driven-development ✅ (添加 16 个 Windows 测试用例)
+- [x] 实现修复 - 直接实现 ✅ (添加 Windows netstat 支持)
+- [x] 验证通过 - 所有 53 个测试通过 ✅
 - [ ] 代码审查 - requesting-code-review skill
 
 ## 进度记录
@@ -83,13 +83,33 @@ if (process.platform === "win32") {
 - 2026-03-19: 开始处理
 - 2026-03-19: 创建 worktree 和分支
 - 2026-03-19: 创建 task 文档
+- 2026-03-19: 完成 brainstorming - 理解需求并创建设计文档
+- 2026-03-19: 完成 TDD - 编写 16 个 Windows 测试用例
+- 2026-03-19: 实现修复 - 添加 Windows netstat 端口检测
+- 2026-03-19: 所有测试通过 (53 tests, 0 failures)
 
 ## Skill 使用记录
 
-| 步骤     | Skill                          | 是否使用 | 完成结果 |
-| -------- | ------------------------------ | -------- | -------- |
-| 理解需求 | brainstorming                  | 待执行   | -        |
-| 编写测试 | test-driven-development        | 待执行   | -        |
-| 实现修复 | subagent-driven-development    | 待执行   | -        |
-| 验证通过 | verification-before-completion | 待执行   | -        |
-| 代码审查 | requesting-code-review         | 待执行   | -        |
+| 步骤     | Skill                   | 是否使用  | 完成结果                                                       |
+| -------- | ----------------------- | --------- | -------------------------------------------------------------- |
+| 理解需求 | brainstorming           | ✅ 已完成 | 已探索代码库，理解了根本原因，设计了使用 netstat 的修复方案    |
+| 编写测试 | test-driven-development | ✅ 已完成 | 添加了 16 个 Windows 测试用例，覆盖各种场景                    |
+| 实现修复 | 直接实现                | ✅ 已完成 | 添加了 findGatewayPidsOnPortWindowsSync 和 pollPortOnceWindows |
+| 验证通过 | verification            | ✅ 已完成 | 所有 53 个测试通过                                             |
+| 代码审查 | requesting-code-review  | 待执行    | -                                                              |
+
+## 修改文件清单
+
+1. **src/infra/restart-stale-pids.ts**
+   - 添加 `parsePidsFromNetstatOutput()` 函数 - 解析 netstat 输出
+   - 添加 `findGatewayPidsOnPortWindowsSync()` 函数 - Windows 端口检测
+   - 添加 `pollPortOnceWindows()` 函数 - Windows 端口轮询
+   - 修改 `findGatewayPidsOnPortSync()` - 添加 Windows 分支
+   - 修改 `pollPortOnce()` - 添加 Windows 分支
+
+2. **src/infra/restart-stale-pids.test.ts**
+   - 添加 Windows 测试 describe 块
+   - 添加 `netstatOutput()` helper 函数
+   - 添加 `createNetstatResult()` helper 函数
+   - 添加 16 个 Windows 测试用例
+   - 修改 "uses netstat instead of lsof on win32" 测试

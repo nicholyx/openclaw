@@ -184,7 +184,7 @@ describe.skipIf(isWindows)("restart-stale-pids", () => {
       expect(result).toEqual([stalePid]); // deduped — not [pid, pid]
     });
 
-    it("returns [] and skips lsof on win32", () => {
+    it("uses netstat instead of lsof on win32", () => {
       // The entire describe block is skipped on Windows (isWindows guard at top),
       // so this test only runs on Linux/macOS. It mocks platform to win32 for the
       // single assertion without needing to restore — the suite-level skipIf means
@@ -192,8 +192,15 @@ describe.skipIf(isWindows)("restart-stale-pids", () => {
       const origDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
       Object.defineProperty(process, "platform", { value: "win32", configurable: true });
       try {
+        // Mock netstat to return empty output (port is free)
+        mockSpawnSync.mockReturnValue(createLsofResult());
         expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
-        expect(mockSpawnSync).not.toHaveBeenCalled();
+        // Should call spawnSync with netstat, not lsof
+        expect(mockSpawnSync).toHaveBeenCalledWith(
+          "netstat",
+          ["-ano"],
+          expect.objectContaining({ timeout: expect.any(Number) }),
+        );
       } finally {
         if (origDescriptor) {
           Object.defineProperty(process, "platform", origDescriptor);
@@ -713,6 +720,263 @@ describe.skipIf(isWindows)("restart-stale-pids", () => {
         Atomics.wait = origWait;
         __testing.setSleepSyncOverride(() => {});
       }
+    });
+  });
+});
+
+// -------------------------------------------------------------------------
+// Windows-specific tests for netstat-based port detection
+// These tests mock the platform to win32 and test the netstat implementation
+// -------------------------------------------------------------------------
+describe("restart-stale-pids (Windows netstat)", () => {
+  // Helper to create netstat output
+  function netstatOutput(entries: Array<{ port: number; pid: number; protocol?: string }>): string {
+    return (
+      entries
+        .map(
+          ({ port, pid, protocol = "TCP" }) =>
+            `  ${protocol}    0.0.0.0:${port}         0.0.0.0:0              LISTENING       ${pid}`,
+        )
+        .join("\r\n") + "\r\n"
+    );
+  }
+
+  type MockNetstatResult = {
+    error: Error | null;
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  };
+
+  function createNetstatResult(overrides: Partial<MockNetstatResult> = {}): MockNetstatResult {
+    return {
+      error: null,
+      status: 0,
+      stdout: "",
+      stderr: "",
+      ...overrides,
+    };
+  }
+
+  let originalPlatform: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    vi.resetModules();
+    // Mock platform as Windows
+    originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+  });
+
+  beforeEach(async () => {
+    ({ __testing, cleanStaleGatewayProcessesSync, findGatewayPidsOnPortSync } =
+      await import("./restart-stale-pids.js"));
+    mockSpawnSync.mockReset();
+    mockResolveGatewayPort.mockReset();
+    mockRestartWarn.mockReset();
+    mockResolveGatewayPort.mockReturnValue(18789);
+    __testing.setSleepSyncOverride(() => {});
+  });
+
+  afterEach(() => {
+    __testing.setSleepSyncOverride(null);
+    __testing.setDateNowOverride(null);
+    vi.restoreAllMocks();
+    // Restore original platform
+    if (originalPlatform) {
+      Object.defineProperty(process, "platform", originalPlatform);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // findGatewayPidsOnPortSync - Windows netstat implementation
+  // -------------------------------------------------------------------------
+  describe("findGatewayPidsOnPortSync (Windows)", () => {
+    it("returns [] when netstat shows no listeners on port", () => {
+      mockSpawnSync.mockReturnValue(createNetstatResult());
+      expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
+    });
+
+    it("returns [] when netstat exits with non-zero status", () => {
+      mockSpawnSync.mockReturnValue(createNetstatResult({ status: 1 }));
+      expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
+    });
+
+    it("logs warning when netstat exits with non-zero status", () => {
+      mockSpawnSync.mockReturnValue(createNetstatResult({ status: 1, stderr: "error" }));
+      expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
+      expect(mockRestartWarn).toHaveBeenCalledWith(
+        expect.stringContaining("netstat exited with status 1"),
+      );
+    });
+
+    it("returns [] when netstat returns an error object (e.g. ENOENT)", () => {
+      mockSpawnSync.mockReturnValue(
+        createNetstatResult({ error: new Error("ENOENT"), status: null }),
+      );
+      expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
+      expect(mockRestartWarn).toHaveBeenCalledWith(
+        expect.stringContaining("netstat failed during stale-pid scan"),
+      );
+    });
+
+    it("parses PIDs from netstat output and excludes current process", () => {
+      const stalePid = process.pid + 1;
+      mockSpawnSync.mockReturnValue(
+        createNetstatResult({
+          stdout: netstatOutput([
+            { port: 18789, pid: stalePid },
+            { port: 18789, pid: process.pid },
+          ]),
+        }),
+      );
+      const pids = findGatewayPidsOnPortSync(18789);
+      expect(pids).toContain(stalePid);
+      expect(pids).not.toContain(process.pid);
+    });
+
+    it("excludes PIDs listening on different ports", () => {
+      const otherPid = process.pid + 2;
+      mockSpawnSync.mockReturnValue(
+        createNetstatResult({
+          stdout: netstatOutput([{ port: 8080, pid: otherPid }]),
+        }),
+      );
+      expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
+    });
+
+    it("deduplicates PIDs from dual-stack listeners (IPv4+IPv6)", () => {
+      const stalePid = process.pid + 600;
+      const stdout =
+        `  TCP    0.0.0.0:18789         0.0.0.0:0              LISTENING       ${stalePid}\r\n` +
+        `  TCP    [::]:18789            [::]:0                 LISTENING       ${stalePid}\r\n`;
+      mockSpawnSync.mockReturnValue(createNetstatResult({ stdout }));
+      const result = findGatewayPidsOnPortSync(18789);
+      expect(result).toEqual([stalePid]); // deduped — not [pid, pid]
+    });
+
+    it("handles IPv6 format in netstat output", () => {
+      const stalePid = process.pid + 3;
+      const stdout = `  TCP    [::]:18789            [::]:0                 LISTENING       ${stalePid}\r\n`;
+      mockSpawnSync.mockReturnValue(createNetstatResult({ stdout }));
+      const pids = findGatewayPidsOnPortSync(18789);
+      expect(pids).toContain(stalePid);
+    });
+
+    it("forwards the spawnTimeoutMs argument to spawnSync", () => {
+      mockSpawnSync.mockReturnValue(createNetstatResult());
+      findGatewayPidsOnPortSync(18789, 400);
+      expect(mockSpawnSync).toHaveBeenCalledWith(
+        "netstat",
+        ["-ano"],
+        expect.objectContaining({ timeout: 400 }),
+      );
+    });
+
+    it("handles malformed netstat output gracefully", () => {
+      mockSpawnSync.mockReturnValue(
+        createNetstatResult({
+          stdout: "malformed output without proper format\r\n",
+        }),
+      );
+      expect(findGatewayPidsOnPortSync(18789)).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // pollPortOnce - Windows netstat polling
+  // -------------------------------------------------------------------------
+  describe("pollPortOnce (Windows)", () => {
+    it("returns free:true when netstat shows no listeners", () => {
+      mockSpawnSync.mockReturnValue(createNetstatResult());
+      const stalePid = process.pid + 500;
+      mockSpawnSync
+        .mockReturnValueOnce(
+          createNetstatResult({
+            stdout: netstatOutput([{ port: 18789, pid: stalePid }]),
+          }),
+        )
+        .mockReturnValue(createNetstatResult());
+      vi.spyOn(process, "kill").mockReturnValue(true);
+      expect(() => cleanStaleGatewayProcessesSync()).not.toThrow();
+    });
+
+    it("returns free:false when netstat shows port in use", () => {
+      const stalePid = process.pid + 501;
+      mockSpawnSync.mockReturnValue(
+        createNetstatResult({
+          stdout: netstatOutput([{ port: 18789, pid: stalePid }]),
+        }),
+      );
+      vi.spyOn(process, "kill").mockReturnValue(true);
+      cleanStaleGatewayProcessesSync();
+      // Should have called spawnSync (polling happened)
+      expect(mockSpawnSync).toHaveBeenCalled();
+    });
+
+    it("handles netstat errors correctly (ENOENT)", () => {
+      const stalePid = process.pid + 502;
+      mockSpawnSync
+        .mockReturnValueOnce(
+          createNetstatResult({
+            stdout: netstatOutput([{ port: 18789, pid: stalePid }]),
+          }),
+        )
+        .mockReturnValue(createNetstatResult({ error: new Error("ENOENT"), status: null }));
+      vi.spyOn(process, "kill").mockReturnValue(true);
+      // Should not throw - bail gracefully on ENOENT
+      expect(() => cleanStaleGatewayProcessesSync()).not.toThrow();
+    });
+
+    it("continues polling on transient netstat errors", () => {
+      const stalePid = process.pid + 503;
+      const events: string[] = [];
+      let call = 0;
+      mockSpawnSync.mockImplementation(() => {
+        call++;
+        if (call === 1) {
+          events.push("initial-find");
+          return createNetstatResult({
+            stdout: netstatOutput([{ port: 18789, pid: stalePid }]),
+          });
+        }
+        if (call === 2) {
+          events.push("transient-error");
+          return createNetstatResult({ status: 1 }); // transient error
+        }
+        events.push("port-free");
+        return createNetstatResult();
+      });
+      vi.spyOn(process, "kill").mockReturnValue(true);
+      cleanStaleGatewayProcessesSync();
+      expect(events).toContain("transient-error");
+      expect(events).toContain("port-free");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // cleanStaleGatewayProcessesSync - Windows integration
+  // -------------------------------------------------------------------------
+  describe("cleanStaleGatewayProcessesSync (Windows)", () => {
+    it("returns [] and does not call process.kill when port has no listeners", () => {
+      mockSpawnSync.mockReturnValue(createNetstatResult());
+      const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
+      expect(cleanStaleGatewayProcessesSync()).toEqual([]);
+      expect(killSpy).not.toHaveBeenCalled();
+    });
+
+    it("sends SIGTERM to stale PIDs and returns them", () => {
+      const stalePid = process.pid + 100;
+      mockSpawnSync
+        .mockReturnValueOnce(
+          createNetstatResult({
+            stdout: netstatOutput([{ port: 18789, pid: stalePid }]),
+          }),
+        )
+        .mockReturnValue(createNetstatResult());
+      const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
+      const result = cleanStaleGatewayProcessesSync();
+      expect(result).toContain(stalePid);
+      expect(killSpy).toHaveBeenCalledWith(stalePid, "SIGTERM");
     });
   });
 });

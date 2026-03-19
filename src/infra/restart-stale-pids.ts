@@ -79,6 +79,34 @@ function parsePidsFromLsofOutput(stdout: string): number[] {
 }
 
 /**
+ * Parse PIDs from Windows netstat -ano output.
+ * Pure function — no I/O. Excludes the current process.
+ *
+ * Netstat output format:
+ *   TCP    0.0.0.0:18789         0.0.0.0:0              LISTENING       12345
+ *   TCP    [::]:18789            [::]:0                 LISTENING       12345
+ */
+function parsePidsFromNetstatOutput(stdout: string, port: number): number[] {
+  const pids: number[] = [];
+  const lines = stdout.split(/\r?\n/);
+  const portStr = `:${port}`;
+
+  for (const line of lines) {
+    // Match lines with LISTENING state and target port
+    if (line.includes("LISTENING") && line.includes(portStr)) {
+      const parts = line.trim().split(/\s+/);
+      const pid = parseInt(parts[parts.length - 1], 10);
+      if (Number.isFinite(pid) && pid > 0) {
+        pids.push(pid);
+      }
+    }
+  }
+
+  // Deduplicate (IPv4 + IPv6) and exclude current process
+  return [...new Set(pids)].filter((pid) => pid !== process.pid);
+}
+
+/**
  * Find PIDs of gateway processes listening on the given port using synchronous lsof.
  * Returns only PIDs that belong to openclaw gateway processes (not the current process).
  */
@@ -87,7 +115,7 @@ export function findGatewayPidsOnPortSync(
   spawnTimeoutMs = SPAWN_TIMEOUT_MS,
 ): number[] {
   if (process.platform === "win32") {
-    return [];
+    return findGatewayPidsOnPortWindowsSync(port, spawnTimeoutMs);
   }
   const lsof = resolveLsofCommandSync();
   const res = spawnSync(lsof, ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fpc"], {
@@ -118,6 +146,38 @@ export function findGatewayPidsOnPortSync(
 }
 
 /**
+ * Find PIDs of processes listening on the given port using Windows netstat.
+ * Used on Windows platforms where lsof is not available.
+ */
+function findGatewayPidsOnPortWindowsSync(port: number, spawnTimeoutMs: number): number[] {
+  const res = spawnSync("netstat", ["-ano"], {
+    encoding: "utf8",
+    timeout: spawnTimeoutMs,
+  });
+
+  if (res.error) {
+    const code = (res.error as NodeJS.ErrnoException).code;
+    const detail =
+      code && code.trim().length > 0
+        ? code
+        : res.error instanceof Error
+          ? res.error.message
+          : "unknown error";
+    restartLog.warn(`netstat failed during stale-pid scan for port ${port}: ${detail}`);
+    return [];
+  }
+
+  if (res.status !== 0) {
+    restartLog.warn(
+      `netstat exited with status ${res.status} during stale-pid scan for port ${port}`,
+    );
+    return [];
+  }
+
+  return parsePidsFromNetstatOutput(res.stdout, port);
+}
+
+/**
  * Attempt a single lsof poll for the given port.
  *
  * Returns a discriminated union with four possible states:
@@ -138,7 +198,42 @@ export function findGatewayPidsOnPortSync(
  */
 type PollResult = { free: true } | { free: false } | { free: null; permanent: boolean };
 
+/**
+ * Windows-specific port polling using netstat.
+ */
+function pollPortOnceWindows(port: number): PollResult {
+  try {
+    const res = spawnSync("netstat", ["-ano"], {
+      encoding: "utf8",
+      timeout: POLL_SPAWN_TIMEOUT_MS,
+    });
+
+    if (res.error) {
+      // Spawn-level failure. ENOENT / EACCES means netstat is permanently
+      // unavailable on this system; other errors (e.g. timeout) are transient.
+      const code = (res.error as NodeJS.ErrnoException).code;
+      const permanent = code === "ENOENT" || code === "EACCES" || code === "EPERM";
+      return { free: null, permanent };
+    }
+
+    if (res.status !== 0) {
+      // Non-zero exit: runtime/permission error. Cannot confirm port state —
+      // treat as a transient failure and keep polling.
+      return { free: null, permanent: false };
+    }
+
+    // Parse netstat output to check if port is free
+    const pids = parsePidsFromNetstatOutput(res.stdout, port);
+    return pids.length === 0 ? { free: true } : { free: false };
+  } catch {
+    return { free: null, permanent: false };
+  }
+}
+
 function pollPortOnce(port: number): PollResult {
+  if (process.platform === "win32") {
+    return pollPortOnceWindows(port);
+  }
   try {
     const lsof = resolveLsofCommandSync();
     const res = spawnSync(lsof, ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fpc"], {
