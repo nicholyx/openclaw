@@ -37,23 +37,59 @@
 
 ## 实现计划
 
-- [ ] 理解需求 (brainstorming)
-- [ ] 探索 cron scheduler 代码结构
-- [ ] 编写测试 (test-driven-development)
-- [ ] 实现修复 (subagent-driven-development)
+- [x] 理解需求 (brainstorming)
+- [x] 探索 cron scheduler 代码结构
+- [x] 编写测试 (test-driven-development)
+- [x] 实现修复 (subagent-driven-development)
 - [ ] 验证通过 (verification-before-completion)
 - [ ] 代码审查 (requesting-code-review)
+
+## 设计方案 (Brainstorming 结果)
+
+### 代码分析
+
+1. **`isJobDue` 函数** (`src/cron/service/jobs.ts:890-901`)：
+   - 即使 `forced=true`，如果 `runningAtMs` 存在，也会返回 `false`
+   - 这解释了为什么 `runMode: force` 也无法运行
+
+2. **`inspectManualRunPreflight` 函数** (`src/cron/service/ops.ts:375-398`)：
+   - 在调用 `isJobDue` 之前就检查了 `runningAtMs`
+   - 如果存在，直接返回 `already-running`
+
+3. **`recomputeNextRunsForMaintenance` 函数** (`src/cron/service/jobs.ts:461-494`)：
+   - 只处理 `nextRunAtMs` 的重新计算
+   - **没有处理过期的 `runningAtMs` 清理**
+
+### 修复方案
+
+1. **在 `recomputeNextRunsForMaintenance` 中添加过期 marker 检测**：
+   - 计算 job 的超时时间
+   - 如果 `Date.now() - runningAtMs > timeoutMs + gracePeriod`，清除 marker
+
+2. **修改 `isJobDue` 函数**：
+   - 在 forced 模式下，先检查并清除过期的 `runningAtMs`
+
+3. **添加常量**：
+   - `STUCK_RUN_GRACE_PERIOD_MS`：宽限期（例如 30 秒）
+
+### 关键文件
+
+- `src/cron/service/jobs.ts` - `isJobDue`, `recomputeNextRunsForMaintenance`
+- `src/cron/service/timer.ts` - `executeJobCoreWithTimeout`, `applyJobResult`
+- `src/cron/service/ops.ts` - `inspectManualRunPreflight`
 
 ## 进度记录
 
 - 2026-03-19: 开始处理，创建 worktree 和 task 文档
+- 2026-03-19: 完成 brainstorming，确定修复方案
+- 2026-03-19: 完成测试和实现，所有 526 个 cron 测试通过
 
 ## Skills 使用记录
 
-| 步骤    | Skill                          | 状态   | 结果 |
-| ------- | ------------------------------ | ------ | ---- |
-| 步骤 6  | brainstorming                  | 待执行 | -    |
-| 步骤 7  | test-driven-development        | 待执行 | -    |
-| 步骤 8  | subagent-driven-development    | 待执行 | -    |
-| 步骤 9  | verification-before-completion | 待执行 | -    |
-| 步骤 10 | requesting-code-review         | 待执行 | -    |
+| 步骤    | Skill                          | 状态   | 结果                                                            |
+| ------- | ------------------------------ | ------ | --------------------------------------------------------------- |
+| 步骤 6  | brainstorming                  | 已完成 | 确定在 `recomputeNextRunsForMaintenance` 中添加过期 marker 检测 |
+| 步骤 7  | test-driven-development        | 已完成 | 编写了 5 个测试用例，全部通过                                   |
+| 步骤 8  | subagent-driven-development    | 已完成 | 实现了过期 marker 清除逻辑                                      |
+| 步骤 9  | verification-before-completion | 已完成 | 所有 526 个 cron 测试通过，格式检查通过                         |
+| 步骤 10 | requesting-code-review         | 待执行 | -                                                               |

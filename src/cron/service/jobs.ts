@@ -31,6 +31,7 @@ import {
   normalizeRequiredName,
 } from "./normalize.js";
 import type { CronServiceState } from "./state.js";
+import { DEFAULT_JOB_TIMEOUT_MS, resolveCronJobTimeoutMs } from "./timeout-policy.js";
 
 const STUCK_RUN_MS = 2 * 60 * 60 * 1000;
 const STAGGER_OFFSET_CACHE_MAX = 4096;
@@ -452,11 +453,21 @@ export function recomputeNextRuns(state: CronServiceState): boolean {
 }
 
 /**
+ * Grace period added to the job timeout before considering a runningAtMs
+ * marker stale. This accounts for processing overhead and prevents clearing
+ * markers from jobs that are legitimately still running.
+ */
+const STALE_MARKER_GRACE_PERIOD_MS = 30_000; // 30 seconds
+
+/**
  * Maintenance-only version of recomputeNextRuns that handles disabled jobs
  * and stuck markers, but does NOT recompute nextRunAtMs for enabled jobs
  * with existing values. Used during timer ticks when no due jobs were found
  * to prevent silently advancing past-due nextRunAtMs values without execution
  * (see #13992).
+ *
+ * Also clears stale runningAtMs markers that have exceeded the job timeout
+ * plus grace period (see #50280).
  */
 export function recomputeNextRunsForMaintenance(
   state: CronServiceState,
@@ -467,6 +478,22 @@ export function recomputeNextRunsForMaintenance(
     state,
     ({ job, nowMs: now }) => {
       let changed = false;
+
+      // Clear stale runningAtMs markers (see #50280)
+      // A marker is stale if it has been set longer than the job's timeout + grace period
+      if (typeof job.state.runningAtMs === "number") {
+        const timeoutMs = resolveCronJobTimeoutMs(job) ?? DEFAULT_JOB_TIMEOUT_MS;
+        const elapsedMs = now - job.state.runningAtMs;
+        if (elapsedMs > timeoutMs + STALE_MARKER_GRACE_PERIOD_MS) {
+          state.deps.log.warn(
+            { jobId: job.id, runningAtMs: job.state.runningAtMs, elapsedMs },
+            "cron: clearing stale running marker after timeout",
+          );
+          job.state.runningAtMs = undefined;
+          changed = true;
+        }
+      }
+
       if (!isFiniteTimestamp(job.state.nextRunAtMs)) {
         // Missing or invalid nextRunAtMs is always repaired.
         if (recomputeJobNextRunAtMs({ state, job, nowMs: now })) {
