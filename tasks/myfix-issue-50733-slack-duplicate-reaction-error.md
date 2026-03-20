@@ -31,10 +31,32 @@ Slack API 返回 `already_reacted` 错误，导致错误消息显示在输出中
 ## 实现计划
 
 - [x] 理解需求
-- [ ] 编写测试
-- [ ] 实现修复
-- [ ] 验证通过
+- [x] Brainstorming 设计方案（已自动批准）
+- [x] 编写测试（TDD 完成）
+- [x] 实现修复（TDD 完成）
+- [x] 验证通过（所有测试通过，格式、lint、类型检查通过）
 - [ ] 代码审查
+
+## 验证证据
+
+### 测试结果
+
+- 新测试：8/8 通过
+- 测试文件：`extensions/slack/src/actions.reactions.test.ts`
+
+### 代码质量检查
+
+- ✅ 格式检查通过
+- ✅ Lint 检查：0 警告，0 错误
+- ✅ 类型检查通过
+- ✅ 所有边界检查通过
+
+### 修改内容
+
+1. 添加 `isSlackApiError` 辅助函数检查 Slack API 错误
+2. 修改 `reactSlackMessage` 捕获并忽略 `already_reacted` 错误
+3. 修改 `removeSlackReaction` 捕获并忽略 `no_reaction` 错误
+4. 添加 8 个测试用例覆盖各种场景
 
 ## 技术方案
 

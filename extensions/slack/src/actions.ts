@@ -77,6 +77,12 @@ async function resolveBotUserId(client: WebClient) {
   return auth.user_id;
 }
 
+function isSlackApiError(err: unknown, code: string): boolean {
+  return (
+    err != null && typeof err === "object" && "data" in err && (err as any).data?.error === code
+  );
+}
+
 export async function reactSlackMessage(
   channelId: string,
   messageId: string,
@@ -84,11 +90,18 @@ export async function reactSlackMessage(
   opts: SlackActionClientOpts = {},
 ) {
   const client = await getClient(opts);
-  await client.reactions.add({
-    channel: channelId,
-    timestamp: messageId,
-    name: normalizeEmoji(emoji),
-  });
+  try {
+    await client.reactions.add({
+      channel: channelId,
+      timestamp: messageId,
+      name: normalizeEmoji(emoji),
+    });
+  } catch (err) {
+    // Slack returns `already_reacted` when the bot already has this
+    // reaction on the message. The desired state is achieved — swallow it.
+    if (isSlackApiError(err, "already_reacted")) return;
+    throw err;
+  }
 }
 
 export async function removeSlackReaction(
@@ -98,11 +111,18 @@ export async function removeSlackReaction(
   opts: SlackActionClientOpts = {},
 ) {
   const client = await getClient(opts);
-  await client.reactions.remove({
-    channel: channelId,
-    timestamp: messageId,
-    name: normalizeEmoji(emoji),
-  });
+  try {
+    await client.reactions.remove({
+      channel: channelId,
+      timestamp: messageId,
+      name: normalizeEmoji(emoji),
+    });
+  } catch (err) {
+    // Slack returns `no_reaction` when trying to remove a reaction that isn't there.
+    // The desired state is achieved — swallow it.
+    if (isSlackApiError(err, "no_reaction")) return;
+    throw err;
+  }
 }
 
 export async function removeOwnSlackReactions(
@@ -129,11 +149,7 @@ export async function removeOwnSlackReactions(
   }
   await Promise.all(
     Array.from(toRemove, (name) =>
-      client.reactions.remove({
-        channel: channelId,
-        timestamp: messageId,
-        name,
-      }),
+      removeSlackReaction(channelId, messageId, name, { client, token: opts.token }),
     ),
   );
   return Array.from(toRemove);
